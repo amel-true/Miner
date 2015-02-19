@@ -6,10 +6,10 @@ namespace Miner;
  * concatenation necessary.
  *
  * @author    Justin Stayton
- * @copyright Copyright 2013 by Justin Stayton
+ * @copyright Copyright 2014 by Justin Stayton
  * @license   https://github.com/jstayton/Miner/blob/master/LICENSE-MIT MIT
  * @package   Miner
- * @version   0.9.1
+ * @version   0.10.0
  */
 class Miner
 {
@@ -143,7 +143,28 @@ class Miner
      */
     const BRACKET_CLOSE = ')';
 
+      /**
+     * Quote for column statement for example
+     * SELECT `desc` from test WHERE 1;
+     * If we execute this statement without quote you get an error
+     * because desc keyword for mysql
+      */
+     const COLUMN_QUOTE = '`';
+
+      /**
+       * const for SELECT * COLUMN, it add because
+       * Mysql disabled to write SELECT `*` ,
+       *
+       */
+    const COLUMN_SELECT_ALL = '*';
+
     /**
+     * PDO database connection to use in executing the statement.
+     *
+     * @var PDO|null
+     */
+
+/**
      * \PDO database connection to use in executing the statement.
      *
      * @var \PDO|null
@@ -195,12 +216,12 @@ class Miner
     /**
      * Tables to DELETE from, or true if deleting from the FROM table.
      *
-     * @var array|boolean
+     * @var array|true
      */
     private $delete;
 
     /**
-     * Column values to INSERT or UPDATE.
+     * Column values to INSERT, UPDATE, or REPLACE.
      *
      * @var array
      */
@@ -366,12 +387,32 @@ class Miner
      *
      * @param  mixed $value value to escape (or not)
      * @param  bool|null $override value-specific override for convenience
-     * @return mixed|boolean value (escaped or original) or false if failed
+     * @return mixed|false value (escaped or original) or false if failed
      */
     public function autoQuote($value, $override = null)
     {
         return $this->getAutoQuote($override) ? $this->quote($value) : $value;
     }
+
+      /**
+       * Check enabled mysql for column quote
+       * Example disabled : '*'
+       * @param $column - column
+       * @return bool
+       */
+      private function isEnabledColumnForQuote( $column )
+      {
+          return $column != self::COLUMN_SELECT_ALL;
+      }
+
+
+      private function getColumnString( $column, $columnQuote = null )
+      {
+          $columnQuote = $this->isEnabledColumnForQuote( $column ) ? $columnQuote : false ;
+          $quote_string = $this->getAutoQuote( $columnQuote )  ? self::COLUMN_QUOTE : '' ;
+          return  ' ' . $quote_string . $column . $quote_string . ' ' ;
+      }
+
 
     /**
      * Safely escape a value for use in a statement.
@@ -517,7 +558,7 @@ class Miner
      * @param  bool $includeText optional include 'SELECT' text, default true
      * @return string SELECT portion of the statement
      */
-    public function getSelectString($includeText = true)
+    public function getSelectString($includeText = true, $isUsingColumnQuote = null)
     {
         $statement = '';
 
@@ -528,7 +569,8 @@ class Miner
         $statement .= $this->getOptionsString(true);
 
         foreach ($this->select as $column => $alias) {
-            $statement .= $column;
+             $statement .= $this->getColumnString( $column, $isUsingColumnQuote );
+
 
             if ($alias) {
                 $statement .= ' AS ' . $alias;
@@ -886,12 +928,12 @@ class Miner
             $autoQuote = $this->getAutoQuote($set['quote']);
 
             if ($usePlaceholders && $autoQuote) {
-                $statement .= $set['column'] . ' ' . self::EQUALS . ' ?, ';
+                    $statement .=  $this->getColumnString( $set['column'], $autoQuote ) . " " . self::EQUALS . " ?, ";
 
                 $this->setPlaceholderValues[] = $set['value'];
             } else {
-                $statement .= $set['column'] . ' ' . self::EQUALS . ' ' . $this->autoQuote($set['value'], $autoQuote) . ', ';
-            }
+             $statement .= $this->getColumnString( $set['column'], $autoQuote ) . " " . self::EQUALS . " " . $this->autoQuote($set['value'], $autoQuote) . ", ";
+         }
         }
 
         $statement = substr($statement, 0, -2);
@@ -1385,7 +1427,8 @@ class Miner
                         break;
                 }
 
-                $statement .= $criterion['column'] . ' ' . $criterion['operator'] . ' ' . $value;
+                          $statement .= $this->getColumnString( $criterion['column'], $criterion['quote'] ) . " " . $criterion['operator'] . " " . $value;
+
             }
         }
 
